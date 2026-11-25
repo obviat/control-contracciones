@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#fff7f5">
+<meta name="description" content="Aplicación para registrar y controlar los intervalos y la duración de las contracciones.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Seguimiento de contracciones</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#292524;background:#fff7f5}
+*{box-sizing:border-box}body{margin:0;padding:18px;max-width:760px;margin-inline:auto}
+h1{font-size:1.55rem;margin:8px 0 4px}.sub{color:#78716c;margin:0 0 18px}
+.panel{background:white;border:1px solid #f0deda;border-radius:18px;padding:18px;margin:14px 0;box-shadow:0 3px 14px #6b34200b}
+.status{text-align:center;font-size:.78rem;font-weight:750;letter-spacing:.08em;color:#78716c}
+.status.active{color:#15803d}.timer{text-align:center;font-size:3.5rem;font-weight:750;font-variant-numeric:tabular-nums;margin:8px 0}
+.hint{text-align:center;color:#78716c;font-size:.9rem;margin:0 0 14px}
+button{border:0;border-radius:12px;padding:14px 16px;font-size:1rem;font-weight:700;cursor:pointer}
+button:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+.primary{width:100%;background:#15803d;color:white}.stop{width:100%;background:#b91c1c;color:white}
+.secondary{background:#f5f5f4;color:#292524}.ghost{background:transparent;color:#b91c1c}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.stat{background:#f5f5f4;border-radius:12px;padding:12px}.value{font-size:1.45rem;font-weight:750;font-variant-numeric:tabular-nums}.label{font-size:.8rem;color:#78716c}
+.warning{background:#fffbeb;border:1px solid #f59e0b;border-radius:12px;padding:12px;margin-top:14px}
+.warning strong{display:block;margin-bottom:4px}
+table{width:100%;border-collapse:collapse;font-size:.9rem}th,td{text-align:left;padding:10px 6px;border-bottom:1px solid #eee;white-space:nowrap}th{color:#78716c;font-size:.78rem}
+.tablewrap{overflow-x:auto}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.actions button{flex:1}
+.note{font-size:.8rem;color:#78716c;line-height:1.45}.empty{text-align:center;color:#78716c;padding:18px}
+@media(max-width:420px){body{padding:12px}.timer{font-size:3rem}th,td{font-size:.8rem;padding:9px 4px}}
+</style>
+</head>
+<body>
+<h1>Seguimiento de contracciones</h1>
+<p class="sub">Registra el inicio y el final de cada contracción y observa cómo evolucionan los intervalos.</p>
+
+<section class="panel">
+  <div id="status" class="status">LISTO PARA REGISTRAR</div>
+  <div id="timer" class="timer" aria-live="off">00:00</div>
+  <p id="hint" class="hint">Pulsa iniciar justo cuando comience una contracción.</p>
+  <button id="mainButton" class="primary">▶ Iniciar contracción</button>
+</section>
+
+<section class="panel">
+  <h2 style="font-size:1.05rem;margin:0 0 12px">Resumen</h2>
+  <div class="grid">
+    <div class="stat"><div id="count" class="value">0</div><div class="label">Contracciones registradas</div></div>
+    <div class="stat"><div id="avgInterval" class="value">—</div><div class="label">Intervalo medio</div></div>
+    <div class="stat"><div id="avgDuration" class="value">—</div><div class="label">Duración media</div></div>
+    <div class="stat"><div id="lastInterval" class="value">—</div><div class="label">Último intervalo</div></div>
+  </div>
+  <div id="warning" class="warning" hidden><strong>Intervalo de 5 minutos o menos</strong>Contactad con la maternidad para recibir indicaciones. No esperéis si hay otros signos de alarma.</div>
+</section>
+
+<section class="panel">
+  <h2 style="font-size:1.05rem;margin:0 0 12px">Historial</h2>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>N.º</th><th>Inicio</th><th>Duración</th><th>Intervalo</th></tr></thead>
+      <tbody id="history"><tr><td colspan="4" class="empty">Todavía no hay contracciones registradas.</td></tr></tbody>
+    </table>
+  </div>
+  <div class="actions">
+    <button id="exportBtn" class="secondary">Exportar copia</button>
+    <button id="importBtn" class="secondary">Importar copia</button>
+    <input id="importFile" type="file" accept="application/json,.json" hidden>
+  </div>
+  <div class="actions"><button id="resetBtn" class="ghost">Reiniciar seguimiento</button></div>
+</section>
+
+<p class="note">Los registros se guardan automáticamente en este dispositivo y permanecen aunque cierres la página. Usa «Exportar copia» para guardar un respaldo. Si el cronómetro está activo, la duración se calcula con el reloj del dispositivo al volver a abrir la página.</p>
+<p class="note"><strong>Importante:</strong> si rompe aguas, hay sangrado, disminuyen los movimientos del bebé o aparece dolor intenso continuo, contactad con urgencias obstétricas sin esperar a completar ningún intervalo. Esta herramienta no sustituye la valoración médica ni las indicaciones de vuestra maternidad.</p>
+
+<script>
+(() => {
+  const KEY = 'seguimientoContracciones_v1';
+  let records = [];
+  let activeStart = null;
+
+  const $ = id => document.getElementById(id);
+  const pad = n => String(n).padStart(2,'0');
+  const durationText = seconds => `${pad(Math.floor(seconds/60))}:${pad(Math.floor(seconds%60))}`;
+  const timeText = timestamp => new Date(timestamp).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const save = () => localStorage.setItem(KEY, JSON.stringify({records,activeStart}));
+  const load = () => {
+    try {
+      const data = JSON.parse(localStorage.getItem(KEY) || '{}');
+      records = Array.isArray(data.records) ? data.records.filter(r => Number.isFinite(r.start) && Number.isFinite(r.end) && r.end >= r.start) : [];
+      activeStart = Number.isFinite(data.activeStart) ? data.activeStart : null;
+    } catch { records=[]; activeStart=null; }
+  };
+  function render() {
+    const active = activeStart !== null;
+    $('status').textContent = active ? 'CONTRACCIÓN EN CURSO' : 'LISTO PARA REGISTRAR';
+    $('status').classList.toggle('active', active);
+    $('timer').textContent = active ? durationText((Date.now()-activeStart)/1000) : '00:00';
+    $('hint').textContent = active ? 'Pulsa finalizar cuando termine la contracción.' : 'Pulsa iniciar justo cuando comience una contracción.';
+    $('mainButton').textContent = active ? '■ Finalizar contracción' : '▶ Iniciar contracción';
+    $('mainButton').className = active ? 'stop' : 'primary';
+
+    const intervals = records.slice(1).map((r,i)=>(r.start-records[i].start)/1000);
+    const durations = records.map(r=>(r.end-r.start)/1000);
+    const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+    $('count').textContent = records.length;
+    $('avgInterval').textContent = avg(intervals) === null ? '—' : durationText(avg(intervals));
+    $('avgDuration').textContent = avg(durations) === null ? '—' : durationText(avg(durations));
+    $('lastInterval').textContent = intervals.length ? durationText(intervals[intervals.length-1]) : '—';
+    $('warning').hidden = !(intervals.length && intervals[intervals.length-1] <= 300);
+
+    $('history').innerHTML = '';
+    if (!records.length) {
+      const tr=document.createElement('tr'), td=document.createElement('td');
+      td.colSpan=4;td.className='empty';td.textContent='Todavía no hay contracciones registradas.';
+      tr.appendChild(td);$('history').appendChild(tr);
+    } else {
+      records.forEach((r,i) => {
+        const tr=document.createElement('tr');
+        const values=[String(i+1),timeText(r.start),durationText((r.end-r.start)/1000),i===0?'—':durationText((r.start-records[i-1].start)/1000)];
+        values.forEach(v=>{const td=document.createElement('td');td.textContent=v;tr.appendChild(td)});
+        $('history').appendChild(tr);
+      });
+    }
+  }
+  $('mainButton').addEventListener('click', () => {
+    if (activeStart === null) activeStart = Date.now();
+    else { const end=Date.now(); records.push({start:activeStart,end}); activeStart=null; }
+    save();render();
+  });
+  $('resetBtn').addEventListener('click', () => {
+    if (!confirm('¿Seguro que quieres borrar el historial y reiniciar el seguimiento?')) return;
+    records=[];activeStart=null;save();render();
+  });
+  $('exportBtn').addEventListener('click', () => {
+    const blob=new Blob([JSON.stringify({records,activeStart,exportedAt:new Date().toISOString()},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='seguimiento-contracciones.json';a.click();URL.revokeObjectURL(url);
+  });
+  $('importBtn').addEventListener('click', ()=>$('importFile').click());
+  $('importFile').addEventListener('change', async e => {
+    const file=e.target.files[0];if(!file)return;
+    try {
+      const data=JSON.parse(await file.text());
+      if(!Array.isArray(data.records))throw new Error('Formato no válido');
+      if(!confirm('La importación sustituirá el historial que hay ahora. ¿Continuar?'))return;
+      records=data.records.filter(r=>Number.isFinite(r.start)&&Number.isFinite(r.end)&&r.end>=r.start);
+      activeStart=Number.isFinite(data.activeStart)?data.activeStart:null;
+      save();render();
+    } catch { alert('No se ha podido importar el archivo. Comprueba que sea una copia JSON válida.'); }
+    e.target.value='';
+  });
+  load();render();
+  setInterval(() => { if(activeStart !== null) render(); }, 250);
+})();
+</script>
+<script>
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(err => console.warn("No se pudo registrar el modo sin conexión:", err));
+  });
+}
+</script>
+</body>
+</html>

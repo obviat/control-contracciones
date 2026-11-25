@@ -1,0 +1,28 @@
+# Control de contracciones — PWA
+
+Esta carpeta contiene una versión instalable como aplicación web progresiva (PWA).
+
+## Publicarla para compartirla
+
+La instalación como PWA requiere que la aplicación esté servida desde una dirección HTTPS (no basta con abrir `index.html` desde Descargas).
+
+Una opción sencilla es GitHub Pages:
+
+1. Crea una cuenta o inicia sesión en GitHub.
+2. Crea un repositorio nuevo, por ejemplo `control-contracciones`.
+3. Sube **el contenido** de esta carpeta al repositorio (index.html, manifest.webmanifest, sw.js e icons/).
+4. En el repositorio, entra en **Settings → Pages**.
+5. En “Build and deployment”, selecciona **Deploy from a branch**, elige `main` y la carpeta `/ (root)`, y guarda.
+6. GitHub te dará una dirección HTTPS. Comparte esa dirección.
+7. En Android, abre el enlace con Chrome → menú ⋮ → **Instalar aplicación** o **Añadir a pantalla de inicio**.
+
+## Datos y privacidad
+
+- Cada móvil guarda sus propios registros en el almacenamiento local del navegador.
+- Los historiales no se sincronizan entre usuarios ni se envían a un servidor.
+- Si se borran los datos del navegador, se puede perder el historial. Usa la opción de exportar copia dentro de la aplicación.
+- Publicar la aplicación hace que el código sea accesible públicamente; no incluyas datos personales en los archivos.
+
+## Importante
+
+Esta herramienta sirve para registrar tiempos, no para diagnosticar el parto ni sustituir las indicaciones del equipo obstétrico.
